@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Damaio Motor Controller</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Damaio Motor Controller</h1>
+            <div class="status-indicator" id="statusIndicator">
+                <span class="status-dot"></span>
+                <span class="status-text">Disconnected</span>
+            </div>
+        </header>
+
+        <main>
+            <!-- Status Panel -->
+            <section class="panel">
+                <h2>Motor Status</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <label>State:</label>
+                        <span id="motorState" class="value">---</span>
+                    </div>
+                    <div class="status-item">
+                        <label>Position:</label>
+                        <span id="motorPosition" class="value">---</span>
+                        <span class="unit">rad</span>
+                    </div>
+                    <div class="status-item">
+                        <label>Velocity:</label>
+                        <span id="motorVelocity" class="value">---</span>
+                        <span class="unit">rad/s</span>
+                    </div>
+                    <div class="status-item">
+                        <label>Torque:</label>
+                        <span id="motorTorque" class="value">---</span>
+                        <span class="unit">Nm</span>
+                    </div>
+                    <div class="status-item">
+                        <label>MOS Temp:</label>
+                        <span id="motorTMOS" class="value">---</span>
+                        <span class="unit">°C</span>
+                    </div>
+                    <div class="status-item">
+                        <label>Rotor Temp:</label>
+                        <span id="motorTRotor" class="value">---</span>
+                        <span class="unit">°C</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Control Panel -->
+            <section class="panel">
+                <h2>Motor Control</h2>
+                <div class="control-group">
+                    <div class="button-group">
+                        <button id="enableBtn" class="btn btn-primary">Enable Motor</button>
+                        <button id="disableBtn" class="btn btn-secondary">Disable Motor</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="torqueSlider">Torque Command:</label>
+                    <div class="slider-container">
+                        <input type="range" id="torqueSlider" min="-28" max="28" step="0.1" value="0" class="slider">
+                        <input type="number" id="torqueInput" min="-28" max="28" step="0.1" value="0" class="number-input">
+                        <span class="unit">Nm</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="kpSlider">Proportional Gain (Kp):</label>
+                    <div class="slider-container">
+                        <input type="range" id="kpSlider" min="0" max="500" step="0.1" value="0" class="slider">
+                        <input type="number" id="kpInput" min="0" max="500" step="0.1" value="0" class="number-input">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="kdSlider">Derivative Gain (Kd):</label>
+                    <div class="slider-container">
+                        <input type="range" id="kdSlider" min="0" max="5" step="0.01" value="0" class="slider">
+                        <input type="number" id="kdInput" min="0" max="5" step="0.01" value="0" class="number-input">
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button id="clearErrorBtn" class="btn btn-warning">Clear Error</button>
+                    <button id="setZeroBtn" class="btn btn-warning">Set Zero Position</button>
+                </div>
+            </section>
+
+            <!-- Info Panel -->
+            <section class="panel">
+                <h2>Information</h2>
+                <div class="info-text">
+                    <p>Motor Control Limits:</p>
+                    <ul>
+                        <li>Position: -12.5 to +12.5 rad</li>
+                        <li>Velocity: -10.0 to +10.0 rad/s</li>
+                        <li>Torque: -28.0 to +28.0 Nm</li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
