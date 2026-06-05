@@ -62,8 +62,8 @@ static void setup_wifi_ap(void)
 		// 	.authmode = WIFI_AUTH_WPA_WPA2_PSK,
 		// },
 		.sta = {
-			.ssid = "letai_E5C7",
-			.password = "wqcdHjJR",
+			.ssid = "Keenetic-8115",
+			.password = "PUrYnaMG",
 		}
 	};
 
