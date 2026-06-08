@@ -53,28 +53,28 @@ static void setup_wifi_ap(void)
 	ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     esp_netif_t *esp_netif_sta = esp_netif_create_default_wifi_sta();
 	wifi_config_t wifi_config = {
-		// .ap = {
-		// 	.ssid = "DamiaoMotor",
-		// 	.ssid_len = strlen("DamiaoMotor"),
-		// 	.channel = 1,
-		// 	.password = "12345678",
-		// 	.max_connection = 4,
-		// 	.authmode = WIFI_AUTH_WPA_WPA2_PSK,
-		// },
-		.sta = {
-			.ssid = "Keenetic-8115",
-			.password = "PUrYnaMG",
-		}
+		.ap = {
+			.ssid = "DamiaoMotor",
+			.ssid_len = strlen("DamiaoMotor"),
+			.channel = 1,
+			.password = "12345678",
+			.max_connection = 4,
+			.authmode = WIFI_AUTH_WPA_WPA2_PSK,
+		},
+		// .sta = {
+		// 	.ssid = "Keenetic-8115",
+		// 	.password = "PUrYnaMG",
+		// }
 	};
 
-	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+	ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
 	ESP_ERROR_CHECK(esp_wifi_start());
-	ESP_ERROR_CHECK(esp_wifi_connect());
+	// ESP_ERROR_CHECK(esp_wifi_connect());
 
 
     /* Set sta as the default interface */
-    esp_netif_set_default_netif(esp_netif_sta);
+    // esp_netif_set_default_netif(esp_netif_sta);
 
 
 	ESP_LOGI(TAG, "WiFi AP started. SSID: DamiaoMotor, Password: 12345678");
