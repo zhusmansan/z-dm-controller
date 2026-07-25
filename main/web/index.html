@@ -9,8 +9,8 @@
 <body>
     <div class="container">
         <header>
-            <h1>🚀 Damaio Motor Controller</h1>
-            <div class="status-indicator" id="statusIndicator">
+            <h1>ШИМ контроллер</h1>
+            <div style="display:none" class="status-indicator" id="statusIndicator">
                 <span class="status-dot"></span>
                 <span class="status-text">Disconnected</span>
             </div>
@@ -18,7 +18,7 @@
 
         <main>
             <!-- Status Panel -->
-            <section class="panel">
+            <section style="display:none" class="panel">
                 <h2>Motor Status</h2>
                 <div class="status-grid">
                     <div class="status-item">
@@ -54,7 +54,7 @@
             </section>
 
             <!-- Control Panel -->
-            <section class="panel">
+            <section style="display:none" class="panel">
                 <h2>Motor Control</h2>
                 <div class="control-group">
                     <div class="button-group">
@@ -94,8 +94,72 @@
                 </div>
             </section>
 
-            <!-- Info Panel -->
             <section class="panel">
+                <h2>Каналы</h2>
+                <div class="channel-grid">
+                    <div class="channel-control">
+                        <div class="channel-header">
+                            <label for="channel0Slider">Канал 1</label>
+                            <span class="channel-pins">GPIO 20 / 21</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="channel0Slider" min="-100" max="100" step="1" value="0" class="slider">
+                            <input type="number" id="channel0Input" min="-100" max="100" step="1" value="0" class="number-input">
+                            <span class="unit">%</span>
+                        </div>
+                    </div>
+                    <div class="channel-control">
+                        <div class="channel-header">
+                            <label for="channel1Slider">Канал 2</label>
+                            <span class="channel-pins">GPIO 6 / 7</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="channel1Slider" min="-100" max="100" step="1" value="0" class="slider">
+                            <input type="number" id="channel1Input" min="-100" max="100" step="1" value="0" class="number-input">
+                            <span class="unit">%</span>
+                        </div>
+                    </div>
+                    <div class="channel-control">
+                        <div class="channel-header">
+                            <label for="channel2Slider">Канал 3</label>
+                            <span class="channel-pins">GPIO 8 / 9</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="channel2Slider" min="-100" max="100" step="1" value="0" class="slider">
+                            <input type="number" id="channel2Input" min="-100" max="100" step="1" value="0" class="number-input">
+                            <span class="unit">%</span>
+                        </div>
+                    </div>
+                    <div class="channel-control">
+                        <div class="channel-header">
+                            <label for="channel3Slider">Канал 4</label>
+                            <span class="channel-pins">GPIO 10 / 11</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="channel3Slider" min="-100" max="100" step="1" value="0" class="slider">
+                            <input type="number" id="channel3Input" min="-100" max="100" step="1" value="0" class="number-input">
+                            <span class="unit">%</span>
+                        </div>
+                    </div>
+                    <div class="channel-control">
+                        <div class="channel-header">
+                            <label for="channel4Slider">Канал 5</label>
+                            <span class="channel-pins">GPIO 12 / 13</span>
+                        </div>
+                        <div class="slider-container">
+                            <input type="range" id="channel4Slider" min="-100" max="100" step="1" value="0" class="slider">
+                            <input type="number" id="channel4Input" min="-100" max="100" step="1" value="0" class="number-input">
+                            <span class="unit">%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button id="stopAllPwmBtn" class="btn btn-secondary">СТОП</button>
+                </div>
+            </section>
+
+            <!-- Info Panel -->
+            <section style="display:none" class="panel">
                 <h2>Information</h2>
                 <div class="info-text">
                     <p>Motor Control Limits:</p>

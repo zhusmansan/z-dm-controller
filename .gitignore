@@ -80,3 +80,5 @@ Desktop.ini
 .devcontainer/
 
 .vscode/
+
+dependencies.lock

@@ -9,6 +9,7 @@
 #include <math.h>
 #include <sys/param.h>
 #include "dm_motor.h"
+#include "dc_motor_pwm.h"
 #include "http_server.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -51,11 +52,11 @@ static void setup_wifi_ap(void)
 
 	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 	ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    esp_netif_t *esp_netif_sta = esp_netif_create_default_wifi_sta();
+    esp_netif_create_default_wifi_sta();
 	wifi_config_t wifi_config = {
 		.ap = {
-			.ssid = "DamiaoMotor",
-			.ssid_len = strlen("DamiaoMotor"),
+			.ssid = "Roboarm",
+			.ssid_len = strlen("Roboarm"),
 			.channel = 1,
 			.password = "12345678",
 			.max_connection = 4,
@@ -86,30 +87,31 @@ void app_main(void)
 	DM_Motor_t motor;
 
 	memset(&motor, 0, sizeof(DM_Motor_t));
-	DM_Motor_Init(&motor);
+	// DM_Motor_Init(&motor);
 
 	motor.motor_id = 0x1;
 	motor.feedback_id = motor.motor_id | 0x10;
 
 	setupCan();
+	dc_motor_pwm_init();
 
-	motor.cmd_torque = 0;
-	setMotorParameters(&motor);
+	// motor.cmd_torque = 0;
+	// setMotorParameters(&motor);
 
-	for (int i = 0; i < 24; i++)
-	{
-		vTaskDelay(pdMS_TO_TICKS(1));
+	// for (int i = 0; i < 24; i++)
+	// {
+	// 	vTaskDelay(pdMS_TO_TICKS(1));
 
-		DM_Read_Register(&motor, &motor.registers[i]);
-		if (motor.registers[i].def->reg_type == REG_TYPE_FLOAT)
-		{
-			ESP_LOGI(TAG, "%2.d:%s = %f\t%s", i, motor.registers[i].def->shortname, motor.registers[i].float_value, motor.registers[i].def->description);
-		}
-		else
-		{
-			ESP_LOGI(TAG, "%2.d:%s = %d\t%s", i, motor.registers[i].def->shortname, motor.registers[i].uint_value, motor.registers[i].def->description);
-		}
-	}
+	// 	DM_Read_Register(&motor, &motor.registers[i]);
+	// 	if (motor.registers[i].def->reg_type == REG_TYPE_FLOAT)
+	// 	{
+	// 		ESP_LOGI(TAG, "%2.d:%s = %f\t%s", i, motor.registers[i].def->shortname, motor.registers[i].float_value, motor.registers[i].def->description);
+	// 	}
+	// 	else
+	// 	{
+	// 		ESP_LOGI(TAG, "%2.d:%s = %d\t%s", i, motor.registers[i].def->shortname, motor.registers[i].uint_value, motor.registers[i].def->description);
+	// 	}
+	// }
 
 	/* Initialize WiFi AP */
 	setup_wifi_ap();
@@ -121,6 +123,7 @@ void app_main(void)
 	http_server_init(&http_config);
 
 	int status_update_counter = 0;
+	int pwm_phase = 0;
 
 	while (true)
 	{
@@ -148,6 +151,13 @@ void app_main(void)
 		}
 
 		DM_Motor_Ctrl_MIT(&motor);
+
+		// for (uint8_t ch = 0; ch < DC_MOTOR_PWM_CHANNEL_COUNT; ++ch)
+		// {
+		// 	int16_t speed = ((pwm_phase + ch) % 2 == 0) ? 80 : -80;
+		// 	dc_motor_pwm_set_speed(ch, speed);
+		// }
+		// pwm_phase = (pwm_phase + 1) % 4;
 
 		/* Broadcast motor status to WebSocket clients every 50ms */
 		status_update_counter++;

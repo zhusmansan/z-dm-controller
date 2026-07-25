@@ -1,4 +1,5 @@
 #include "http_server.h"
+#include "dc_motor_pwm.h"
 #include "esp_netif.h"
 #include "esp_eth.h"
 
@@ -120,6 +121,18 @@ static esp_err_t ws_handler(httpd_req_t *req)
                         ESP_LOGI(TAG, "KD set to %.2f", g_motor->cmd_kd);
                     }
                 }
+            } else if (strcmp(type, "pwm") == 0) {
+                cJSON *channel_item = cJSON_GetObjectItem(root, "channel");
+                cJSON *value_item = cJSON_GetObjectItem(root, "value");
+
+                if (channel_item && channel_item->type == cJSON_Number && value_item && value_item->type == cJSON_Number) {
+                    int channel = channel_item->valueint;
+                    int32_t pwm_value = (int32_t)value_item->valuedouble;
+                    if (channel >= 0 && channel < DC_MOTOR_PWM_CHANNEL_COUNT) {
+                        dc_motor_pwm_set_speed((uint8_t)channel, pwm_value);
+                        ESP_LOGI(TAG, "PWM channel %d set to %d", channel, pwm_value);
+                    }
+                }
             } else if (strcmp(type, "command") == 0) {
                 cJSON *action = cJSON_GetObjectItem(root, "action");
                 if (action && action->type == cJSON_String) {
@@ -139,6 +152,9 @@ static esp_err_t ws_handler(httpd_req_t *req)
                     } else if (strcmp(action->valuestring, "set_zero") == 0) {
                         DM_Send_Command(g_motor, M_CMD_SET_ZERO_POSITION);
                         ESP_LOGI(TAG, "Set zero position command sent");
+                    } else if (strcmp(action->valuestring, "stop_all_pwm") == 0) {
+                        dc_motor_pwm_stop_all();
+                        ESP_LOGI(TAG, "All PWM channels stopped");
                     }
                 }
             }

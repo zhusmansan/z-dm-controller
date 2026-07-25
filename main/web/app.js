@@ -154,6 +154,24 @@ class MotorController {
         }
     }
 
+    setPwmChannel(channel, value) {
+        const pwmValue = parseInt(value, 10);
+        if (!isNaN(pwmValue) && pwmValue >= -100 && pwmValue <= 100) {
+            this.sendMessage({
+                type: 'pwm',
+                channel: channel,
+                value: pwmValue
+            });
+        }
+    }
+
+    stopAllPwm() {
+        this.sendMessage({
+            type: 'command',
+            action: 'stop_all_pwm'
+        });
+    }
+
     clearError() {
         this.sendMessage({
             type: 'command',
@@ -174,6 +192,7 @@ class MotorController {
         document.getElementById('disableBtn').addEventListener('click', () => this.disableMotor());
         document.getElementById('clearErrorBtn').addEventListener('click', () => this.clearError());
         document.getElementById('setZeroBtn').addEventListener('click', () => this.setZeroPosition());
+        document.getElementById('stopAllPwmBtn').addEventListener('click', () => this.stopAllPwm());
 
         // Torque controls
         const torqueSlider = document.getElementById('torqueSlider');
@@ -223,6 +242,39 @@ class MotorController {
             kdSlider.value = e.target.value;
             this.setKd(e.target.value);
         });
+
+        // PWM channel controls
+        for (let i = 0; i < 5; i++) {
+            const slider = document.getElementById(`channel${i}Slider`);
+            const input = document.getElementById(`channel${i}Input`);
+
+            slider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value, 10);
+                input.value = value;
+                this.setPwmChannel(i, value);
+            });
+
+            slider.addEventListener('change', (e) => {
+                const value = parseInt(e.target.value, 10);
+                slider.value = 0;
+                input.value = 0;
+                this.setPwmChannel(i, 0);
+            });
+
+            input.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value, 10);
+                if (!isNaN(value)) {
+                    slider.value = value;
+                    this.setPwmChannel(i, value);
+                }
+            });
+
+            input.addEventListener('change', (e) => {
+                input.value = 0;
+                slider.value = 0;
+                this.setPwmChannel(i, 0);
+            });
+        }
     }
 }
 
