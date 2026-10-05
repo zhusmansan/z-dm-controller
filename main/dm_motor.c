@@ -1,4 +1,5 @@
 #include "dm_motor.h"
+#include "can_bus.h"
 #include "math.h"
 #include "board_config.h"
 #include <stdlib.h>
@@ -102,7 +103,7 @@ static IRAM_ATTR bool twai_sender_tx_done_callback(twai_node_handle_t handle, co
 // Bus error callback
 static IRAM_ATTR bool twai_sender_on_error_callback(twai_node_handle_t handle, const twai_error_event_data_t *edata, void *user_ctx)
 {
-	ESP_EARLY_LOGW(TAG, "TWAI node error: 0x%x", edata->err_flags.val);
+	// ESP_EARLY_LOGW(TAG, "TWAI node error: 0x%x", edata->err_flags.val);
 	return false; // No task wake required
 }
 
@@ -213,16 +214,7 @@ void DM_Motor_Init(DM_Motor_t *motor)
  */
 void DM_Motor_Send(uint16_t can_id, uint8_t *data, void *retPtr, void (*frameDecoder)(void *, twai_listener_data_t *))
 {
-
-	twai_frame_t tx_msg = {
-		.header.id = can_id, // Message ID
-		.header.ide = false, // DO NOT Use 29-bit extended ID format
-		.buffer = data,		 // Pointer to data to transmit
-		.buffer_len = 8,	 // Length of data to transmit
-	};
-
-	ESP_ERROR_CHECK(twai_node_transmit(can_node, &tx_msg, 0)); // Timeout = 0: returns immediately if queue is full
-	ESP_ERROR_CHECK(twai_node_transmit_wait_all_done(can_node, -1));
+	ESP_ERROR_CHECK(can_bus_send_frame(can_id, data, 8));
 
 	if (xSemaphoreTake(can_listener_ctx.rx_result_semaphore, pdMS_TO_TICKS(15)) == pdTRUE)
 	{
@@ -242,6 +234,26 @@ void DM_Motor_Send(uint16_t can_id, uint8_t *data, void *retPtr, void (*frameDec
 		can_listener_ctx.read_idx = (can_listener_ctx.read_idx + 1) % POLL_DEPTH;
 		xSemaphoreGive(can_listener_ctx.free_pool_semaphore);
 	}
+}
+
+esp_err_t can_bus_send_frame(uint16_t can_id, const uint8_t *data, size_t length)
+{
+	if (can_node == NULL || data == NULL || can_id > 0x7FF || length == 0 || length > 8) {
+		return ESP_ERR_INVALID_ARG;
+	}
+
+	twai_frame_t tx_msg = {
+		.header.id = can_id,
+		.header.ide = false,
+		.buffer = (uint8_t *)data,
+		.buffer_len = length,
+	};
+
+	esp_err_t ret = twai_node_transmit(can_node, &tx_msg, 0);
+	if (ret != ESP_OK) {
+		return ret;
+	}
+	return twai_node_transmit_wait_all_done(can_node, -1);
 }
 
 /**

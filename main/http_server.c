@@ -1,5 +1,4 @@
 #include "http_server.h"
-#include "dc_motor_pwm.h"
 #include "esp_netif.h"
 #include "esp_eth.h"
 
@@ -14,6 +13,7 @@
 static const char *TAG = "http_server";
 static httpd_handle_t server = NULL;
 static DM_Motor_t *g_motor = NULL;
+static motor_command_interface_t g_motor_commands = {0};
 static SemaphoreHandle_t g_motor_mutex = NULL;
 static int g_ws_fd = -1;
 
@@ -127,9 +127,15 @@ static esp_err_t ws_handler(httpd_req_t *req)
 
                 if (channel_item && channel_item->type == cJSON_Number && value_item && value_item->type == cJSON_Number) {
                     int channel = channel_item->valueint;
-                    int32_t pwm_value = (int32_t)value_item->valuedouble;
-                    if (channel >= 0 && channel < DC_MOTOR_PWM_CHANNEL_COUNT) {
-                        dc_motor_pwm_set_speed((uint8_t)channel, pwm_value);
+                    double requested_speed = value_item->valuedouble;
+                    if (channel >= 0 && channel < g_motor_commands.motor_channel_count &&
+                        requested_speed >= -100 && requested_speed <= 100) {
+                        int16_t speed = (int16_t)requested_speed;
+                        esp_err_t speed_ret = g_motor_commands.set_motor_speed(g_motor_commands.motor_context, (uint8_t)channel, speed);
+                        if (speed_ret != ESP_OK) {
+                            ESP_LOGW(TAG, "Failed to set motor channel %d speed: %s", channel, esp_err_to_name(speed_ret));
+                        }
+                        int32_t pwm_value = speed;
                         ESP_LOGI(TAG, "PWM channel %d set to %d", channel, pwm_value);
                     }
                 }
@@ -138,23 +144,23 @@ static esp_err_t ws_handler(httpd_req_t *req)
                 if (action && action->type == cJSON_String) {
                     if (strcmp(action->valuestring, "enable") == 0) {
                         if (g_motor->state.state == M_STATE_DISABLED) {
-                            DM_Send_Command(g_motor, M_CMD_ENABLE);
+                            g_motor_commands.send_command(g_motor_commands.context, MOTOR_COMMAND_ENABLE);
                             ESP_LOGI(TAG, "Motor enabled");
                         }
                     } else if (strcmp(action->valuestring, "disable") == 0) {
                         if (g_motor->state.state != M_STATE_DISABLED) {
-                            DM_Send_Command(g_motor, M_CMD_DISABLE);
+                            g_motor_commands.send_command(g_motor_commands.context, MOTOR_COMMAND_DISABLE);
                             ESP_LOGI(TAG, "Motor disabled");
                         }
                     } else if (strcmp(action->valuestring, "clear_error") == 0) {
-                        DM_Send_Command(g_motor, M_CMD_CLEAR_ERROR);
+                        g_motor_commands.send_command(g_motor_commands.context, MOTOR_COMMAND_CLEAR_ERROR);
                         ESP_LOGI(TAG, "Clear error command sent");
                     } else if (strcmp(action->valuestring, "set_zero") == 0) {
-                        DM_Send_Command(g_motor, M_CMD_SET_ZERO_POSITION);
+                        g_motor_commands.send_command(g_motor_commands.context, MOTOR_COMMAND_SET_ZERO_POSITION);
                         ESP_LOGI(TAG, "Set zero position command sent");
                     } else if (strcmp(action->valuestring, "stop_all_pwm") == 0) {
-                        dc_motor_pwm_stop_all();
-                        ESP_LOGI(TAG, "All PWM channels stopped");
+                        g_motor_commands.stop_all_motors(g_motor_commands.motor_context);
+                        ESP_LOGI(TAG, "All motors stopped");
                     }
                 }
             }
@@ -211,12 +217,19 @@ void http_server_broadcast_status(DM_Motor_t *motor)
 
 esp_err_t http_server_init(http_server_config_t *config)
 {
+    if (config == NULL || config->motor == NULL || config->motor_commands.send_command == NULL ||
+        config->motor_commands.set_motor_speed == NULL || config->motor_commands.stop_all_motors == NULL ||
+        config->motor_commands.motor_channel_count == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     if (server != NULL) {
         ESP_LOGE(TAG, "Server already initialized");
         return ESP_ERR_INVALID_STATE;
     }
 
     g_motor = config->motor;
+    g_motor_commands = config->motor_commands;
     g_motor_mutex = xSemaphoreCreateMutex();
     if (g_motor_mutex == NULL) {
         ESP_LOGE(TAG, "Failed to create motor mutex");

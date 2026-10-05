@@ -2,9 +2,11 @@
 #define HTTP_SERVER_H
 
 #include "dm_motor.h"
+#include "motor_command_interface.h"
 #include "esp_err.h"
 typedef struct {
     DM_Motor_t *motor;
+    motor_command_interface_t motor_commands;
 } http_server_config_t;
 
 esp_err_t http_server_init(http_server_config_t *config);

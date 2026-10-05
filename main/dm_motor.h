@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "esp_err.h"
 // // #include "bsp_can.h"
 
 #define MOTOR_TIMEOUT_MS 50
