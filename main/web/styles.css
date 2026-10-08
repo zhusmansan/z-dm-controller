@@ -38,22 +38,37 @@ header h1 {
     align-items: center;
     gap: 10px;
     padding: 10px 15px;
-    background: #f0f0f0;
-    border-radius: 20px;
+    background: #fff4d6;
+    border-radius: 6px;
     font-weight: 600;
+    color: #76520a;
 }
 
 .status-dot {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    background: #ff4444;
+    background: #d99400;
     animation: pulse 2s infinite;
 }
 
 .status-indicator.connected .status-dot {
-    background: #44ff44;
+    background: #16834b;
     animation: none;
+}
+
+.status-indicator.connected {
+    background: #e4f5eb;
+    color: #145c38;
+}
+
+.status-indicator.disconnected {
+    background: #fde8e7;
+    color: #8f2722;
+}
+
+.status-indicator.disconnected .status-dot {
+    background: #c63831;
 }
 
 @keyframes pulse {

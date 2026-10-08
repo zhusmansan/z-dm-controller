@@ -22,6 +22,8 @@ typedef struct {
     uint8_t id;
     uint16_t can_id;
     motor_pwm_pin_config_t pwm_pins;
+    char * name;
+    void * state; // Pointer to motor state structure, can be NULL if not used
 } motor_config_t;
 
 extern const motor_config_t motor_configs[];

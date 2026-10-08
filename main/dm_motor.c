@@ -95,7 +95,7 @@ static IRAM_ATTR bool twai_sender_tx_done_callback(twai_node_handle_t handle, co
 {
 	if (!edata->is_tx_success)
 	{
-		ESP_EARLY_LOGW(TAG, "Failed to transmit message, ID: 0x%X", edata->done_tx_frame->header.id);
+		// ESP_EARLY_LOGW(TAG, "Failed to transmit message, ID: 0x%X", edata->done_tx_frame->header.id);
 	}
 	return false; // No task wake required
 }
@@ -119,6 +119,9 @@ static bool IRAM_ATTR twai_listener_on_state_change_callback(twai_node_handle_t 
 {
 	const char *twai_state_name[] = {"error_active", "error_warning", "error_passive", "bus_off"};
 	ESP_EARLY_LOGI(TAG, "state changed: %s -> %s", twai_state_name[edata->old_sta], twai_state_name[edata->new_sta]);
+	// if(edata->new_sta > TWAI_ERROR_WARNING){
+	// 	 twai_node_recover(handle);
+	// }
 	return false;
 }
 
@@ -173,7 +176,7 @@ bool setupCan()
 		.bit_timing = {
 			.bitrate = CAN_BITRATE,
 		},
-		.fail_retry_cnt = 3,
+		.fail_retry_cnt = 0,
 		.tx_queue_depth = CAN_QUEUE_DEPTH,
 	};
 
@@ -238,6 +241,7 @@ void DM_Motor_Send(uint16_t can_id, uint8_t *data, void *retPtr, void (*frameDec
 
 esp_err_t can_bus_send_frame(uint16_t can_id, const uint8_t *data, size_t length)
 {
+	// ESP_LOGI(TAG, "Sending CAN frame: ID=0x%X, length=%zu", can_id, length);
 	if (can_node == NULL || data == NULL || can_id > 0x7FF || length == 0 || length > 8) {
 		return ESP_ERR_INVALID_ARG;
 	}
@@ -249,6 +253,8 @@ esp_err_t can_bus_send_frame(uint16_t can_id, const uint8_t *data, size_t length
 		.buffer_len = length,
 	};
 
+
+	// twai_node_recover(can_node);
 	esp_err_t ret = twai_node_transmit(can_node, &tx_msg, 0);
 	if (ret != ESP_OK) {
 		return ret;

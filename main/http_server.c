@@ -8,16 +8,25 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "motor_request_queue.h"
+#include "motor_config.h"
+#include <limits.h>
 #include <string.h>
 
 static const char *TAG = "http_server";
 static httpd_handle_t server = NULL;
-static DM_Motor_t *g_motor = NULL;
-static motor_command_interface_t g_motor_commands = {0};
 static SemaphoreHandle_t g_motor_mutex = NULL;
 static int g_ws_fd = -1;
 
 #define MAX_WS_PAYLOAD 512
+
+static void enqueue_motor_request(const motor_request_t *request)
+{
+    esp_err_t ret = motor_request_queue_send(request);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Motor request queue rejected request: %s", esp_err_to_name(ret));
+    }
+}
 
 /* Root handler to serve index.html */
 static esp_err_t root_handler(httpd_req_t *req)
@@ -48,6 +57,7 @@ static esp_err_t ws_post_handshake_cb(httpd_req_t *req)
     ESP_LOGI(TAG, "=== ws_post_handshake_cb called ===");
 
     g_ws_fd = httpd_req_to_sockfd(req);
+    http_server_broadcast_motor_configs();
     return ESP_OK;
 }
 
@@ -104,68 +114,62 @@ static esp_err_t ws_handler(httpd_req_t *req)
 
         const char *type = type_item->valuestring;
 
-        if (xSemaphoreTake(g_motor_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            if (strcmp(type, "control") == 0) {
+        if (strcmp(type, "control") == 0) {
                 cJSON *action = cJSON_GetObjectItem(root, "action");
                 cJSON *value = cJSON_GetObjectItem(root, "value");
 
                 if (action && action->type == cJSON_String && value && value->type == cJSON_Number) {
-                     if (strcmp(action->valuestring, "torque") == 0) {
-                        g_motor->cmd_torque = value->valuedouble;
-                        ESP_LOGI(TAG, "Torque set to %.2f", g_motor->cmd_torque);
+                    motor_request_t request = {.value = (float)value->valuedouble};
+                    if (strcmp(action->valuestring, "torque") == 0) {
+                        request.type = MOTOR_REQUEST_SET_TORQUE;
                     } else if (strcmp(action->valuestring, "kp") == 0) {
-                        g_motor->cmd_kp = value->valuedouble;
-                        ESP_LOGI(TAG, "KP set to %.2f", g_motor->cmd_kp);
+                        request.type = MOTOR_REQUEST_SET_KP;
                     } else if (strcmp(action->valuestring, "kd") == 0) {
-                        g_motor->cmd_kd = value->valuedouble;
-                        ESP_LOGI(TAG, "KD set to %.2f", g_motor->cmd_kd);
+                        request.type = MOTOR_REQUEST_SET_KD;
+                    } else {
+                        request.type = (motor_request_type_t)-1;
+                    }
+                    if (request.type != (motor_request_type_t)-1) {
+                        enqueue_motor_request(&request);
                     }
                 }
-            } else if (strcmp(type, "pwm") == 0) {
+        } else if (strcmp(type, "pwm") == 0) {
                 cJSON *channel_item = cJSON_GetObjectItem(root, "channel");
                 cJSON *value_item = cJSON_GetObjectItem(root, "value");
 
                 if (channel_item && channel_item->type == cJSON_Number && value_item && value_item->type == cJSON_Number) {
                     int channel = channel_item->valueint;
                     double requested_speed = value_item->valuedouble;
-                    if (channel >= 0 && channel < g_motor_commands.motor_channel_count &&
-                        requested_speed >= -100 && requested_speed <= 100) {
-                        int16_t speed = (int16_t)requested_speed;
-                        esp_err_t speed_ret = g_motor_commands.set_motor_speed(g_motor_commands.motor_context, (uint8_t)channel, speed);
-                        if (speed_ret != ESP_OK) {
-                            ESP_LOGW(TAG, "Failed to set motor channel %d speed: %s", channel, esp_err_to_name(speed_ret));
-                        }
-                        int32_t pwm_value = speed;
-                        ESP_LOGI(TAG, "PWM channel %d set to %d", channel, pwm_value);
+                    if (channel >= 0 && channel <= UINT8_MAX && requested_speed >= -100 && requested_speed <= 100) {
+                        motor_request_t request = {
+                            .type = MOTOR_REQUEST_SET_SPEED,
+                            .channel = (uint8_t)channel,
+                            .speed = (int16_t)requested_speed,
+                        };
+                        enqueue_motor_request(&request);
                     }
                 }
-            } else if (strcmp(type, "command") == 0) {
+        } else if (strcmp(type, "command") == 0) {
                 cJSON *action = cJSON_GetObjectItem(root, "action");
                 if (action && action->type == cJSON_String) {
+                    motor_request_t request = {.type = MOTOR_REQUEST_COMMAND};
                     if (strcmp(action->valuestring, "enable") == 0) {
-                        if (g_motor->state.state == M_STATE_DISABLED) {
-                            g_motor_commands.send_command(g_motor_commands.context, MOTOR_COMMAND_ENABLE);
-                            ESP_LOGI(TAG, "Motor enabled");
-                        }
+                        request.command = MOTOR_COMMAND_ENABLE;
                     } else if (strcmp(action->valuestring, "disable") == 0) {
-                        if (g_motor->state.state != M_STATE_DISABLED) {
-                            g_motor_commands.send_command(g_motor_commands.context, MOTOR_COMMAND_DISABLE);
-                            ESP_LOGI(TAG, "Motor disabled");
-                        }
+                        request.command = MOTOR_COMMAND_DISABLE;
                     } else if (strcmp(action->valuestring, "clear_error") == 0) {
-                        g_motor_commands.send_command(g_motor_commands.context, MOTOR_COMMAND_CLEAR_ERROR);
-                        ESP_LOGI(TAG, "Clear error command sent");
+                        request.command = MOTOR_COMMAND_CLEAR_ERROR;
                     } else if (strcmp(action->valuestring, "set_zero") == 0) {
-                        g_motor_commands.send_command(g_motor_commands.context, MOTOR_COMMAND_SET_ZERO_POSITION);
-                        ESP_LOGI(TAG, "Set zero position command sent");
+                        request.command = MOTOR_COMMAND_SET_ZERO_POSITION;
                     } else if (strcmp(action->valuestring, "stop_all_pwm") == 0) {
-                        g_motor_commands.stop_all_motors(g_motor_commands.motor_context);
-                        ESP_LOGI(TAG, "All motors stopped");
+                        request.type = MOTOR_REQUEST_STOP_ALL;
+                    } else {
+                        request.type = (motor_request_type_t)-1;
+                    }
+                    if (request.type != (motor_request_type_t)-1) {
+                        enqueue_motor_request(&request);
                     }
                 }
-            }
-
-            xSemaphoreGive(g_motor_mutex);
         }
 
         cJSON_Delete(root);
@@ -175,6 +179,75 @@ static esp_err_t ws_handler(httpd_req_t *req)
     }
 
     return ESP_OK;
+}
+
+void http_server_broadcast_motor_configs()
+{
+    if (server == NULL || g_ws_fd < 0) {
+        return;
+    }
+
+    if (xSemaphoreTake(g_motor_mutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+        return;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        xSemaphoreGive(g_motor_mutex);
+        return;
+    }
+
+    cJSON *motor_configs_array = cJSON_AddArrayToObject(root, "motor_configs");
+    if (motor_configs_array == NULL) {
+        cJSON_Delete(root);
+        xSemaphoreGive(g_motor_mutex);
+        return;
+    }
+
+    cJSON_AddStringToObject(root, "type", "motor_configs");
+    for (size_t i = 0; i < motor_config_count; ++i) {
+        const motor_config_t *config = &motor_configs[i];
+        cJSON *config_json = cJSON_CreateObject();
+        if (config_json == NULL) {
+            continue;
+        }
+
+        cJSON_AddNumberToObject(config_json, "type", config->type);
+        cJSON_AddNumberToObject(config_json, "id", config->id);
+        if (config->can_id != 0) {
+            cJSON_AddNumberToObject(config_json, "can_id", config->can_id);
+        }
+        if (config->name != NULL) {
+            cJSON_AddStringToObject(config_json, "name", config->name);
+        }
+        if (config->type == MOTOR_TYPE_PWM_HBRIDGE) {
+            cJSON_AddNumberToObject(config_json, "forward_gpio", config->pwm_pins.forward_gpio);
+            cJSON_AddNumberToObject(config_json, "reverse_gpio", config->pwm_pins.reverse_gpio);
+        }
+        cJSON_AddItemToArray(motor_configs_array, config_json);
+    }
+
+    char *payload = cJSON_Print(root);
+    cJSON_Delete(root);
+    if (payload == NULL) {
+        xSemaphoreGive(g_motor_mutex);
+        return;
+    }
+
+    httpd_ws_frame_t ws_pkt;
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.payload = (uint8_t *)payload;
+    ws_pkt.len = strlen(payload);
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+
+    esp_err_t ret = httpd_ws_send_frame_async(server, g_ws_fd, &ws_pkt);
+    if (ret != ESP_OK) {
+        ESP_LOGD(TAG, "Failed to send WebSocket frame: %s", esp_err_to_name(ret));
+        g_ws_fd = -1;
+    }
+
+    free(payload);
+    xSemaphoreGive(g_motor_mutex);
 }
 
 void http_server_broadcast_status(DM_Motor_t *motor)
@@ -215,21 +288,13 @@ void http_server_broadcast_status(DM_Motor_t *motor)
     xSemaphoreGive(g_motor_mutex);
 }
 
-esp_err_t http_server_init(http_server_config_t *config)
+esp_err_t http_server_init(void)
 {
-    if (config == NULL || config->motor == NULL || config->motor_commands.send_command == NULL ||
-        config->motor_commands.set_motor_speed == NULL || config->motor_commands.stop_all_motors == NULL ||
-        config->motor_commands.motor_channel_count == 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
     if (server != NULL) {
         ESP_LOGE(TAG, "Server already initialized");
         return ESP_ERR_INVALID_STATE;
     }
 
-    g_motor = config->motor;
-    g_motor_commands = config->motor_commands;
     g_motor_mutex = xSemaphoreCreateMutex();
     if (g_motor_mutex == NULL) {
         ESP_LOGE(TAG, "Failed to create motor mutex");

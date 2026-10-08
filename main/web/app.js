@@ -5,8 +5,11 @@ class MotorController {
     ? window.location.hostname : "192.168.1.7"}/ws`;
 //  `ws://${window.location.host}/ws`;
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
-        this.reconnectDelay = 3000;
+        this.reconnectTimer = null;
+        this.initialReconnectDelay = 1000;
+        this.maxReconnectDelay = 30000;
+        this.wsMessageTimer = null;
+        this.wsMessageTimeout = 1500;
         
         this.init();
     }
@@ -14,28 +17,54 @@ class MotorController {
     init() {
         this.connectWebSocket();
         this.setupEventListeners();
+        window.addEventListener('online', () => {
+            if (this.reconnectTimer !== null) {
+                clearTimeout(this.reconnectTimer);
+                this.reconnectTimer = null;
+            }
+            this.connectWebSocket();
+        });
     }
 
     connectWebSocket() {
+        if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+            return;
+        }
+
         try {
-            this.ws = new WebSocket(this.wsUrl);
+            const socket = new WebSocket(this.wsUrl);
+            this.ws = socket;
             
-            this.ws.onopen = () => {
+            socket.onopen = () => {
+                if (this.ws !== socket) return;
                 console.log('WebSocket connected');
                 this.updateConnectionStatus(true);
                 this.reconnectAttempts = 0;
+                this.refreshWebSocketWatchdog(socket);
             };
 
-            this.ws.onmessage = (event) => {
-                this.handleMessage(JSON.parse(event.data));
+            socket.onmessage = (event) => {
+                if (this.ws !== socket) return;
+                this.refreshWebSocketWatchdog(socket);
+                try {
+                    this.handleMessage(JSON.parse(event.data));
+                } catch (error) {
+                    console.error('Invalid WebSocket message:', error);
+                }
             };
 
-            this.ws.onerror = (error) => {
+            socket.onerror = (error) => {
+                if (this.ws !== socket) return;
                 console.error('WebSocket error:', error);
                 this.updateConnectionStatus(false);
+                socket.close();
             };
 
-            this.ws.onclose = () => {
+            socket.onclose = () => {
+                if (this.ws !== socket) return;
+                clearTimeout(this.wsMessageTimer);
+                this.wsMessageTimer = null;
+                this.ws = null;
                 console.log('WebSocket disconnected');
                 this.updateConnectionStatus(false);
                 this.attemptReconnect();
@@ -46,20 +75,114 @@ class MotorController {
         }
     }
 
+    refreshWebSocketWatchdog(socket) {
+        clearTimeout(this.wsMessageTimer);
+        this.wsMessageTimer = setTimeout(() => {
+            if (this.ws !== socket) return;
+
+            console.warn('WebSocket timed out: no server messages received');
+            this.ws = null;
+            this.wsMessageTimer = null;
+            this.updateConnectionStatus(false);
+            socket.close();
+            this.attemptReconnect();
+        }, this.wsMessageTimeout);
+    }
+
     attemptReconnect() {
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            this.reconnectAttempts++;
-            console.log(`Reconnecting... attempt ${this.reconnectAttempts}`);
-            setTimeout(() => this.connectWebSocket(), this.reconnectDelay);
-        } else {
-            console.error('Max reconnection attempts reached');
+        if (this.reconnectTimer !== null) {
+            return;
         }
+
+        const delay = Math.min(this.maxReconnectDelay, 500);
+        this.reconnectAttempts++;
+        console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.connectWebSocket();
+        }, delay);
     }
 
     handleMessage(data) {
         if (data.type === 'status') {
             this.updateStatus(data);
+        } else if (data.type === 'motor_configs' && Array.isArray(data.motor_configs)) {
+            this.renderMotorControls(data.motor_configs);
         }
+    }
+
+    renderMotorControls(motorConfigs) {
+        const container = document.getElementById('motorControls');
+        container.replaceChildren();
+
+        motorConfigs.forEach((motor, channel) => {
+            const control = document.createElement('div');
+            control.className = 'channel-control';
+
+            const header = document.createElement('div');
+            header.className = 'channel-header';
+
+            const label = document.createElement('label');
+            label.htmlFor = `motor-${channel}-slider`;
+            label.textContent = motor.name || `Канал ${motor.id}`;
+
+            const details = document.createElement('span');
+            details.className = 'channel-pins';
+            if (motor.type === 1) {
+                details.textContent = `GPIO ${motor.forward_gpio} / ${motor.reverse_gpio}`;
+            } else if (motor.type === 2) {
+                details.textContent = `CAN 0x${Number(motor.can_id || 0).toString(16).toUpperCase()}`;
+            } else {
+                details.textContent = 'Damiao CAN';
+            }
+            header.append(label, details);
+
+            const sliderContainer = document.createElement('div');
+            sliderContainer.className = 'slider-container';
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.id = `motor-${channel}-slider`;
+            slider.min = '-100';
+            slider.max = '100';
+            slider.step = '1';
+            slider.value = '0';
+            slider.className = 'slider';
+
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = '-100';
+            input.max = '100';
+            input.step = '1';
+            input.value = '0';
+            input.className = 'number-input';
+            input.setAttribute('aria-label', `${label.textContent} speed`);
+
+            const unit = document.createElement('span');
+            unit.className = 'unit';
+            unit.textContent = '%';
+
+            slider.addEventListener('input', () => {
+                input.value = slider.value;
+                this.setPwmChannel(channel, slider.value);
+            });
+            slider.addEventListener('change', () => {
+                slider.value = '0';
+                input.value = '0';
+                this.setPwmChannel(channel, 0);
+            });
+            input.addEventListener('input', () => {
+                const value = Number(input.value);
+                if (Number.isInteger(value) && value >= -100 && value <= 100) {
+                    slider.value = String(value);
+                    this.setPwmChannel(channel, value);
+                }
+            });
+
+            sliderContainer.append(slider, input, unit);
+            control.append(header, sliderContainer);
+            container.append(control);
+        });
     }
 
     updateStatus(data) {
@@ -89,14 +212,14 @@ class MotorController {
     updateConnectionStatus(connected) {
         const indicator = document.getElementById('statusIndicator');
         const statusText = indicator.querySelector('.status-text');
-        
-        if (connected) {
-            indicator.classList.add('connected');
-            statusText.textContent = 'Connected';
-        } else {
-            indicator.classList.remove('connected');
-            statusText.textContent = 'Disconnected';
-        }
+        indicator.classList.toggle('connected', connected);
+        indicator.classList.toggle('disconnected', !connected);
+        if(statusText)
+            if (connected) {
+                statusText.textContent = 'WebSocket connected';
+            } else {
+                statusText.textContent = 'WebSocket disconnected; reconnecting';
+            }
     }
 
     sendMessage(message) {
@@ -243,38 +366,6 @@ class MotorController {
             this.setKd(e.target.value);
         });
 
-        // PWM channel controls
-        for (let i = 0; i < 5; i++) {
-            const slider = document.getElementById(`channel${i}Slider`);
-            const input = document.getElementById(`channel${i}Input`);
-
-            slider.addEventListener('input', (e) => {
-                const value = parseInt(e.target.value, 10);
-                input.value = value;
-                this.setPwmChannel(i, value);
-            });
-
-            slider.addEventListener('change', (e) => {
-                const value = parseInt(e.target.value, 10);
-                slider.value = 0;
-                input.value = 0;
-                this.setPwmChannel(i, 0);
-            });
-
-            input.addEventListener('input', (e) => {
-                const value = parseInt(e.target.value, 10);
-                if (!isNaN(value)) {
-                    slider.value = value;
-                    this.setPwmChannel(i, value);
-                }
-            });
-
-            input.addEventListener('change', (e) => {
-                input.value = 0;
-                slider.value = 0;
-                this.setPwmChannel(i, 0);
-            });
-        }
     }
 }
 

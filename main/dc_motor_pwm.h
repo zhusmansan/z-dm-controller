@@ -10,7 +10,7 @@
 
 esp_err_t dc_motor_pwm_init(const motor_config_t *configs, size_t config_count);
 uint8_t dc_motor_pwm_channel_count(void);
-void dc_motor_pwm_set_speed(uint8_t channel, int16_t speed_percent);
+void dc_motor_pwm_set_speed(const motor_config_t *motor, int16_t speed_percent);
 void dc_motor_pwm_stop_all(void);
 
 #endif

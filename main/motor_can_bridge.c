@@ -1,14 +1,14 @@
 #include "motor_can_bridge.h"
+#include "esp_err.h"
+#include "esp_log.h"
 
 #include <string.h>
 
 #include "can_bus.h"
-
-#define MOTOR_CAN_BRIDGE_MAX_MOTORS 8
+static const char *TAG = "motor_can_bridge";
 
 static uint16_t g_can_id;
 static uint8_t g_motor_count;
-static int16_t g_motor_speeds[MOTOR_CAN_BRIDGE_MAX_MOTORS];
 
 esp_err_t motor_can_bridge_init(const motor_config_t *configs, size_t config_count)
 {
@@ -18,13 +18,12 @@ esp_err_t motor_can_bridge_init(const motor_config_t *configs, size_t config_cou
 
     g_can_id = 0;
     g_motor_count = 0;
-    memset(g_motor_speeds, 0, sizeof(g_motor_speeds));
 
     for (size_t i = 0; i < config_count; ++i) {
         if (configs[i].type != MOTOR_TYPE_CAN) {
             continue;
         }
-        if (configs[i].can_id > 0x7FF || configs[i].id >= MOTOR_CAN_BRIDGE_MAX_MOTORS) {
+        if (configs[i].can_id > 0x7FF ) {
             return ESP_ERR_INVALID_ARG;
         }
         if (g_motor_count == 0) {
@@ -32,59 +31,32 @@ esp_err_t motor_can_bridge_init(const motor_config_t *configs, size_t config_cou
         } else if (configs[i].can_id != g_can_id) {
             return ESP_ERR_INVALID_ARG;
         }
-        if (configs[i].id >= g_motor_count) {
-            g_motor_count = configs[i].id + 1;
-        }
+        g_motor_count ++;
     }
 
-    if (g_motor_count == 0) {
-        return ESP_OK;
-    }
-
-    for (uint8_t channel = 0; channel < g_motor_count; ++channel) {
-        bool found = false;
-        for (size_t i = 0; i < config_count; ++i) {
-            if (configs[i].type == MOTOR_TYPE_CAN && configs[i].id == channel) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            return ESP_ERR_INVALID_ARG;
-        }
-    }
+    ESP_LOGI(TAG, "Motor CAN bridge initialized with %d motors on CAN ID 0x%03X", g_motor_count, g_can_id);
 
     return ESP_OK;
 }
 
-static esp_err_t send_speeds(void)
+esp_err_t motor_can_bridge_send(const int16_t motor_speeds[MOTOR_CAN_BRIDGE_MAX_MOTORS])
 {
+    if (motor_speeds == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
     if (g_motor_count == 0) {
-        return ESP_ERR_INVALID_STATE;
+        return ESP_OK;//No motors, no problem
     }
 
     uint8_t payload[MOTOR_CAN_BRIDGE_MAX_MOTORS];
     for (uint8_t i = 0; i < g_motor_count; ++i) {
-        payload[i] = (uint8_t)(int8_t)g_motor_speeds[i];
+        if (motor_speeds[i] < -100 || motor_speeds[i] > 100) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        payload[i] = (uint8_t)(int8_t)motor_speeds[i];
     }
 
     return can_bus_send_frame(g_can_id, payload, g_motor_count);
-}
-
-esp_err_t motor_can_bridge_set_speed(uint8_t channel, int16_t speed)
-{
-    if (channel >= g_motor_count || speed < -100 || speed > 100) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    g_motor_speeds[channel] = speed;
-    return send_speeds();
-}
-
-esp_err_t motor_can_bridge_stop_all(void)
-{
-    memset(g_motor_speeds, 0, sizeof(g_motor_speeds));
-    return send_speeds();
 }
 
 uint8_t motor_can_bridge_channel_count(void)
